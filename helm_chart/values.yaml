@@ -1,20 +1,20 @@
 namespace: universe-marketplace
-appName: universe-marketplace-backend
+appName: marketplace-indexer
+fullnameOverride: marketplace-indexer
 
 replicaCount: 1
 
 image:
-  repository: universe/marketplace-backend
+  repository: kunooo/marketplace-indexer
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: "20211109.1"
 
 imagePullSecrets: []
-fullnameOverride: ""
 
 serviceAccount:
   # Specifies whether a service account should be created
-  create: true
+  create: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
@@ -23,17 +23,17 @@ serviceAccount:
 
 podAnnotations: {}
 
-podSecurityContext:
-  {}
+# podSecurityContext:
+#   {}
   # fsGroup: 2000
 
-securityContext:
-  capabilities:
-    drop:
-      - ALL
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 1000
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #     - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
 
 service:
   type: ClusterIP
@@ -75,14 +75,14 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
 
 configurations:
-  - name: marketplace-appsettings
-    mountPath: /workdir/appsetings/appsettings.json
+  - name: marketplace-indexer-appsettings
+    mountPath: /workdir/dist/appsettings/appsettings.json
     subPath: appsettings.json
     enabled: true
 
 secrets:
   - name: marketplace-secrets
-    mountPath: /workdir/secrets/secrets.json
+    mountPath: /workdir/dist/secrets/secrets.json
     subPath: secrets.json
     enabled: true
 

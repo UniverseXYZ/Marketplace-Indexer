@@ -48,6 +48,10 @@ Selector labels
 {{- define "helm_chart.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "helm_chart.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+app: {{ .Values.appName }}
+{{- end }}
+
+{{/*
 {{- end }}
 
 {{/*
