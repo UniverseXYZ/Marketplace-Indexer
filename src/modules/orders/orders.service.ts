@@ -59,9 +59,10 @@ export class OrdersService {
   private async syncToMarketplace(event: MarketplaceIndexer) {
     await firstValueFrom(
       this.httpService.put(
-        `${R.path(['marketplaceBackendApiHost'], this.config.values)}/${
-          event.leftOrderHash
-        }/match`,
+        `${R.path(
+          ['marketplaceBackendApiHost'],
+          this.config.values,
+        )}/v1/orders/${event.leftOrderHash}/match`,
         {
           txHash: event.txHash,
           leftMaker: event.leftMaker,
