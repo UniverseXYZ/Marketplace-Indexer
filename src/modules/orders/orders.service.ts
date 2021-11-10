@@ -62,7 +62,7 @@ export class OrdersService {
         `${R.path(
           ['marketplaceBackendApiHost'],
           this.config.values,
-        )}/v1/orders/${event.leftOrderHash}/match`,
+        )}/internal/orders/${event.leftOrderHash}/match`,
         {
           txHash: event.txHash,
           leftMaker: event.leftMaker,
