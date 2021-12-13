@@ -37,6 +37,7 @@ lerna-debug.log*
 # Secret files
 **/secrets.json
 **/appsettings.json
+**/secrets.dev.json
 
 # environment files
 .env*
