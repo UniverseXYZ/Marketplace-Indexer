@@ -1,9 +1,11 @@
 import { registerAs } from '@nestjs/config';
 import R from 'ramda';
-import appsetings from '../../../appsettings/appsettings.json';
-import secrets from '../../../secrets/secrets.json';
+import { getAppSettings, getSecrets } from '../../utils/config';
 
-export const configValues = R.mergeDeepRight(appsetings, secrets);
+const appsettings = getAppSettings('appsettings');
+const secrets = getSecrets('secrets');
+
+export const configValues = R.mergeDeepRight(appsettings, secrets);
 
 export default registerAs('config', () => {
   return configValues;
