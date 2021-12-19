@@ -28,7 +28,7 @@ export class OrdersService {
    * #3 Save new event to database
    * #4 Send event to marketplace backend by calling its internal endpoint
    */
-  @Cron(CronExpression.EVERY_10_SECONDS)
+  @Cron(CronExpression.EVERY_SECOND)
   public async updateOrderStatus() {
     if (this.currentBlockNumber <= 0) {
       const existingEvent = await this.getLatestEvent();

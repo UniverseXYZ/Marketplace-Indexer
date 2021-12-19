@@ -8,7 +8,7 @@ image:
   repository: kunooo/marketplace-indexer
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "20211110.1"
+  tag: "20211116.2"
 
 imagePullSecrets: []
 
@@ -76,13 +76,13 @@ autoscaling:
 
 configurations:
   - name: marketplace-indexer-appsettings
-    mountPath: /workdir/dist/appsettings/appsettings.json
+    mountPath: /workdir/appsettings/appsettings.json
     subPath: appsettings.json
     enabled: true
 
 secrets:
   - name: marketplace-indexer-secrets
-    mountPath: /workdir/dist/secrets/secrets.json
+    mountPath: /workdir/secrets/secrets.json
     subPath: secrets.json
     enabled: true
 
