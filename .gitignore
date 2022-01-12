@@ -40,7 +40,7 @@ lerna-debug.log*
 **/secrets.dev.json
 
 # environment files
-.env*
+.env
 # Byte-compiled / optimized / DLL files
 **/__pycache__/
 **/*.py[cod]
