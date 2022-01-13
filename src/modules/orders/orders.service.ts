@@ -59,10 +59,7 @@ export class OrdersService {
   private async syncToMarketplace(event: MarketplaceIndexer) {
     await firstValueFrom(
       this.httpService.put(
-        `${R.path(
-          ['marketplaceBackendApiHost'],
-          this.config.values,
-        )}/internal/orders/${event.leftOrderHash}/match`,
+        `${this.config.values.ORDERBOOK_URL}/internal/orders/${event.leftOrderHash}/match`,
         {
           txHash: event.txHash,
           leftMaker: event.leftMaker,
@@ -136,12 +133,9 @@ export class OrdersService {
 
     try {
       const result = await firstValueFrom(
-        this.httpService.post(
-          R.path(['subgraphUrls', 'marketplace'], this.config.values),
-          {
-            query: queryString,
-          },
-        ),
+        this.httpService.post(this.config.values.SUBGRAPH_ORDERBOOK_ENDPOINT, {
+          query: queryString,
+        }),
       );
       if (result?.data?.data?.orderMatchEntities?.length) {
         return result.data.data.orderMatchEntities[0];

@@ -4,8 +4,7 @@ WORKDIR /workdir
 COPY package.json package-lock.json ./
 RUN npm install
 
-COPY tsconfig.json ./
-COPY tsconfig.build.json ./
+COPY tsconfig.json tsconfig.build.json ormconfig.ts ./
 COPY src ./src
 RUN npm run build
 
