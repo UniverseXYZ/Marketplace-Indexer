@@ -7,11 +7,11 @@ dotenv.config();
 export = [
   {
     type: 'postgres',
-    host: configValues.database.host,
-    port: configValues.database.port,
-    username: configValues.database.username,
-    password: configValues.database.password,
-    database: configValues.database.database,
+    host: configValues.DB_HOST,
+    port: configValues.DB_PORT,
+    username: configValues.DB_USERNAME,
+    password: configValues.DB_PASSWORD,
+    database: configValues.DB_DATABASE_NAME,
     entities: ['src/**/*.entity.ts'],
     namingStrategy: new SnakeNamingStrategy(),
     logging: 'all',
