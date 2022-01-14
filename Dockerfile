@@ -6,6 +6,7 @@ RUN npm install
 
 COPY tsconfig.json tsconfig.build.json ormconfig.ts ./
 COPY src ./src
+COPY migrations ./migrations
 RUN npm run build
 
 # production images
