@@ -83,7 +83,7 @@ export class OrdersService {
       if(EventTypesEnum.MATCH === event.type) {
         await firstValueFrom(
           this.httpService.put(
-            `${this.config.values.ORDERBOOK_URL}/internal/orders/${event.leftOrderHash}/match`,
+            `${this.config.values.ORDERBOOK_URL}/internal/orders/match`,
             {
               txHash: event.txHash,
               leftMaker: event.leftMaker,
@@ -98,15 +98,11 @@ export class OrdersService {
       } else if (EventTypesEnum.CANCEL === event.type) {
         await firstValueFrom(
           this.httpService.put(
-            `${this.config.values.ORDERBOOK_URL}/internal/orders/${event.leftOrderHash}/cancel`,
+            `${this.config.values.ORDERBOOK_URL}/internal/orders/cancel`,
             {
               txHash: event.txHash,
               leftMaker: event.leftMaker,
-              rightMaker: event.rightMaker,
               leftOrderHash: event.leftOrderHash,
-              rightOrderHash: event.rightOrderHash,
-              newLeftFill: event.newLeftFill,
-              newRightFill: event.newRightFill,
             },
           ),
         );
