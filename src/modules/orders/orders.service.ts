@@ -37,6 +37,12 @@ export class OrdersService {
   public async updateOrderStatus() {
 
     /**
+     * @TODO consider there's a lot of events simultaneously, then the current logic
+     * would pull all those events one by one with a 5 seconds interval.
+     * We need a logic to process evets faster.
+     */
+
+    /**
      * @TODO there's no mechanism to ensure that events from the indexer 
      * always find their way to the orderbook BE bc if the syncToMarketplace() 
      * was unsuccessful, it does not repeat a try in the next iteration.
