@@ -6,6 +6,7 @@ import {
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { EventTypesEnum } from './order.types';
 
 @Entity('marketplace-indexer')
 export class MarketplaceIndexer {
@@ -24,21 +25,35 @@ export class MarketplaceIndexer {
   @Index({ unique: false })
   blockTimestamp: number;
 
+  @Column({
+    type: 'enum',
+    enum: EventTypesEnum,
+  })
+  type: EventTypesEnum;
+
   @Column()
   @Index({ unique: false })
   leftOrderHash: string;
-  @Column()
+  @Column({
+    nullable: true,
+  })
   @Index({ unique: false })
   rightOrderHash: string;
 
   @Column()
   @Index({ unique: false })
   leftMaker: string;
-  @Column()
+  @Column({
+    nullable: true,
+  })
   rightMaker: string;
-  @Column()
+  @Column({
+    nullable: true,
+  })
   newLeftFill: string;
-  @Column()
+  @Column({
+    nullable: true,
+  })
   newRightFill: string;
   @Column()
   leftAssetClass: string;
