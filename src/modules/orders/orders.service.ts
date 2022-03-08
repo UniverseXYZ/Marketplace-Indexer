@@ -59,7 +59,7 @@ export class OrdersService {
         EventTypesEnum.MATCH,
         this.currentMatchBlockNumber,
       );
-    const newMatchEvent = await this.querySubgraph(
+    const newMatchEvent = await this.querySubgraphMatchEvents(
       this.currentMatchBlockNumber,
       matchTxHashesInCurrentBlock,
     );
@@ -166,6 +166,7 @@ export class OrdersService {
     const events = await this.marketplaceIndexerRepository.find({
       select: ['txHash'],
       where: {
+        type: eventType,
         blockNumber: currentBlockNumber,
       },
     });
@@ -222,7 +223,7 @@ export class OrdersService {
     }
   }
 
-  private async querySubgraph(
+  private async querySubgraphMatchEvents(
     currentBlockNumber: number,
     txHashes: string[],
   ): Promise<OrderMatchEntity> {
