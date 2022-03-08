@@ -13,10 +13,8 @@ import { EventTypesEnum } from './order.types';
 @Injectable()
 export class OrdersService {
   private currentMatchBlockNumber = 0;
-  private currentMatchTxHash: string;
 
   private currentCancelBlockNumber = 0;
-  private currentCancelTxHash: string;
 
   constructor(
     @InjectRepository(MarketplaceIndexer)
@@ -52,14 +50,18 @@ export class OrdersService {
     if (this.currentMatchBlockNumber <= 0) {
       const latestMatchEvent = await this.getLatestEvent(EventTypesEnum.MATCH);
       console.log(
-        `Latest Match event in our DB, block number: ${latestMatchEvent?.blockNumber}, tx hash: ${latestMatchEvent?.txHash}`,
+        `Latest block number with a Match event in our DB: ${latestMatchEvent?.blockNumber}`,
       );
       this.currentMatchBlockNumber = latestMatchEvent?.blockNumber ?? 1;
-      this.currentMatchTxHash = latestMatchEvent?.txHash ?? '';
     }
+    const matchTxHashesInCurrentBlock =
+      await this.getTxHashesByEventTypeAndBlockNumber(
+        EventTypesEnum.MATCH,
+        this.currentMatchBlockNumber,
+      );
     const newMatchEvent = await this.querySubgraph(
       this.currentMatchBlockNumber,
-      this.currentMatchTxHash,
+      matchTxHashesInCurrentBlock,
     );
     if (newMatchEvent) {
       console.log(`Got new Match event, tx hash: ${newMatchEvent.id}`);
@@ -68,7 +70,6 @@ export class OrdersService {
         EventTypesEnum.MATCH,
       );
       this.currentMatchBlockNumber = savedMatchEvent.blockNumber;
-      this.currentMatchTxHash = savedMatchEvent.txHash;
 
       await this.syncToMarketplace(savedMatchEvent);
     }
@@ -79,14 +80,18 @@ export class OrdersService {
         EventTypesEnum.CANCEL,
       );
       console.log(
-        `Latest Cancel event in our DB, block number: ${latestCancelEvent?.blockNumber}, tx hash: ${latestCancelEvent?.txHash}`,
+        `Latest block number with a Cancel event in our DB: ${latestCancelEvent?.blockNumber}`,
       );
       this.currentCancelBlockNumber = latestCancelEvent?.blockNumber ?? 1;
-      this.currentCancelTxHash = latestCancelEvent?.txHash ?? '';
     }
+    const cancelTxHashesInCurrentBlock =
+      await this.getTxHashesByEventTypeAndBlockNumber(
+        EventTypesEnum.CANCEL,
+        this.currentCancelBlockNumber,
+      );
     const newCancelEvent = await this.querySubgraphCancelEvents(
       this.currentCancelBlockNumber,
-      this.currentCancelTxHash,
+      cancelTxHashesInCurrentBlock,
     );
     if (newCancelEvent) {
       console.log(`Got new Cancel event, tx hash: ${newCancelEvent.id}`);
@@ -95,7 +100,6 @@ export class OrdersService {
         EventTypesEnum.CANCEL,
       );
       this.currentCancelBlockNumber = savedCancelEvent.blockNumber;
-      this.currentCancelTxHash = savedCancelEvent.txHash;
 
       await this.syncToMarketplace(savedCancelEvent);
     }
@@ -138,13 +142,38 @@ export class OrdersService {
 
   private async getLatestEvent(eventType: EventTypesEnum) {
     const existingEvent = await this.marketplaceIndexerRepository.findOne({
-      select: ['blockNumber', 'txHash'],
+      select: ['blockNumber'],
       order: { blockNumber: 'DESC' },
       where: {
         type: eventType,
       },
     });
     return existingEvent;
+  }
+
+  /**
+   * Returns array of transaction's hashes of specified event type in the specified block number
+   * from the Indexer table (marketplace-indexer).
+   * @param eventType
+   * @param currentBlockNumber
+   * @returns {Promise<string[]>}
+   */
+  private async getTxHashesByEventTypeAndBlockNumber(
+    eventType: EventTypesEnum,
+    currentBlockNumber: number,
+  ): Promise<string[]> {
+    const value = [];
+    const events = await this.marketplaceIndexerRepository.find({
+      select: ['txHash'],
+      where: {
+        blockNumber: currentBlockNumber,
+      },
+    });
+    for (const event of events) {
+      value.push(event.txHash);
+    }
+
+    return value;
   }
 
   private async saveNewEvent(newEvent: any, eventType: EventTypesEnum) {
@@ -195,10 +224,11 @@ export class OrdersService {
 
   private async querySubgraph(
     currentBlockNumber: number,
-    txHash: string,
+    txHashes: string[],
   ): Promise<OrderMatchEntity> {
+    const formattedTxHashes = `\"${txHashes.join(`\", \"`)}\"`;
     const queryString = `{
-      orderMatchEntities(first: 1, orderBy: blockNumber, orderDirection: asc, where: {blockNumber_gte: ${currentBlockNumber}, id_not: \"${txHash}\"}) {
+      orderMatchEntities(first: 1, orderBy: blockNumber, orderDirection: asc, where: {blockNumber_gte: ${currentBlockNumber}, id_not_in: [${formattedTxHashes}]}) {
         id
         txFrom
         txValue
@@ -238,15 +268,16 @@ export class OrdersService {
    * saved into the marketplace-indexer table.
    * Return the Cancel event data.
    * @param currentBlockNumber
-   * @param txHash
+   * @param txHashes
    * @returns Promise<OrderCancelEntity>
    */
   private async querySubgraphCancelEvents(
     currentBlockNumber: number,
-    txHash: string,
+    txHashes: string[],
   ): Promise<OrderCancelEntity> {
+    const formattedTxHashes = `\"${txHashes.join(`\", \"`)}\"`;
     const queryString = `{
-      orderCancelEntities(first: 1, orderBy: blockNumber, orderDirection: asc, where: {blockNumber_gte: ${currentBlockNumber}, id_not: \"${txHash}\"}) {
+      orderCancelEntities(first: 1, orderBy: blockNumber, orderDirection: asc, where: {blockNumber_gte: ${currentBlockNumber}, id_not_in: [${formattedTxHashes}]}) {
         id
         txFrom
         txValue
