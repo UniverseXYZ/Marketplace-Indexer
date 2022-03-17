@@ -14,19 +14,17 @@ import { EventTypesEnum } from './order.types';
 @Injectable()
 export class OrdersService implements OnModuleInit {
   private currentMatchBlockNumber = 0;
-  private isMatchEventsInProcess = false;
 
   private currentCancelBlockNumber = 0;
-  private isCancelEventsInProcess = false;
 
   private logger = new Logger(this.constructor.name);
 
   constructor(
     @InjectRepository(MarketplaceIndexer)
     private readonly marketplaceIndexerRepository: Repository<MarketplaceIndexer>,
-    private schedulerRegistry: SchedulerRegistry,
     private readonly config: AppConfig,
     private httpService: HttpService,
+    private schedulerRegistry: SchedulerRegistry,
   ) {}
 
   /**
@@ -69,125 +67,64 @@ export class OrdersService implements OnModuleInit {
    */
   // @Cron(CronExpression.EVERY_5_SECONDS)
   public async updateMatchOrdersStatus() {
-    /**
-     * @TODO there's no mechanism to ensure that events from the indexer
-     * always find their way to the orderbook BE bc if the syncToMarketplace()
-     * was unsuccessful, it does not repeat a try in the next iteration.
-     * In the same time, the Indexer has to move forward with indexing the events and not be stale.
-     */
-
     // Pulling & processing Match events from the subgraph
-    if (!this.isMatchEventsInProcess) {
-      this.isMatchEventsInProcess = true;
-
-      if (this.currentMatchBlockNumber <= 0) {
-        const latestMatchEvent = await this.getLatestEvent(
-          EventTypesEnum.MATCH,
-        );
-        console.log(
-          `Latest block number with a Match event in our DB: ${latestMatchEvent?.blockNumber}`,
-        );
-        this.currentMatchBlockNumber = latestMatchEvent?.blockNumber ?? 1;
-      }
-      const matchTxHashesInCurrentBlock =
-        await this.getTxHashesByEventTypeAndBlockNumber(
-          EventTypesEnum.MATCH,
-          this.currentMatchBlockNumber,
-        );
-      const newMatchEvents = await this.querySubgraphMatchEvents(
-        this.currentMatchBlockNumber,
-        matchTxHashesInCurrentBlock,
+    if (this.currentMatchBlockNumber <= 0) {
+      const latestMatchEvent = await this.getLatestEvent(EventTypesEnum.MATCH);
+      console.log(
+        `Latest block number with a Match event in our DB: ${latestMatchEvent?.blockNumber}`,
       );
-      if (newMatchEvents.length) {
-        // try catch block is to make sure the toggle isMatchEventsInProcess will eventually be set to false!
-        // one important aspect here is that in case of an exception when saving events, we need to stop the whole batch (newMatchEvents array)
-        // so that it will pull the same batch and retry on the next iteration.
-        // that means the Indexer does not move forward if the exception keeps being thrown, rather than
-        // moving forward with some event unprocessed and the problem left being unaware of.
-        try {
-          // this code must run synchronously bc there may be a case when one of the promises resolves successfully and its blockNumber
-          // gets into the DB and the Indexer service restarts for any reason, the next iteration will pull events starting the latest
-          // blockNumber but there may be unprocesessed events with lower blockNumber in the subgraph.
-          const eventsToSync = [];
-          for (const newMatchEvent of newMatchEvents) {
-            console.log(`Got new Match event, tx hash: ${newMatchEvent.id}`);
+      this.currentMatchBlockNumber = latestMatchEvent?.blockNumber ?? 1;
+    }
+    const matchTxHashesInCurrentBlock =
+      await this.getTxHashesByEventTypeAndBlockNumber(
+        EventTypesEnum.MATCH,
+        this.currentMatchBlockNumber,
+      );
+    const newMatchEvent = await this.querySubgraphMatchEvents(
+      this.currentMatchBlockNumber,
+      matchTxHashesInCurrentBlock,
+    );
+    if (newMatchEvent) {
+      console.log(`Got new Match event, tx hash: ${newMatchEvent.id}`);
+      const savedMatchEvent = await this.saveNewEvent(
+        newMatchEvent,
+        EventTypesEnum.MATCH,
+      );
+      this.currentMatchBlockNumber = savedMatchEvent.blockNumber;
 
-            // bulk insert would increase the performance but we'd loose the cool feature of .save()
-            // which is "upsert" way of saving objects which is quite useful in here. note that primary key is txHash.
-            // await this.marketplaceIndexerRepository
-            //   .createQueryBuilder()
-            //   .insert()
-            //   .into(MarketplaceIndexer)
-            //   .values(  array of events  )
-            //   .execute();
-
-            const savedMatchEvent = await this.saveNewEvent(
-              newMatchEvent,
-              EventTypesEnum.MATCH,
-            );
-            this.currentMatchBlockNumber = savedMatchEvent.blockNumber;
-
-            eventsToSync.push(savedMatchEvent);
-          }
-
-          await this.syncToMarketplace(eventsToSync); // does not throw any exceptions.
-        } catch (e) {
-          console.log('Error processing new Match events: ' + e);
-        }
-      }
-
-      this.isMatchEventsInProcess = false;
-    } else {
-      console.log('Match events are in process, skipping ...');
+      await this.syncToMarketplace(savedMatchEvent);
     }
   }
 
   public async updateCancelOrdersStatus() {
     // Pulling & processing Cancel events from the subgraph
-    if (!this.isCancelEventsInProcess) {
-      this.isCancelEventsInProcess = true;
-
-      if (this.currentCancelBlockNumber <= 0) {
-        const latestCancelEvent = await this.getLatestEvent(
-          EventTypesEnum.CANCEL,
-        );
-        console.log(
-          `Latest block number with a Cancel event in our DB: ${latestCancelEvent?.blockNumber}`,
-        );
-        this.currentCancelBlockNumber = latestCancelEvent?.blockNumber ?? 1;
-      }
-      const cancelTxHashesInCurrentBlock =
-        await this.getTxHashesByEventTypeAndBlockNumber(
-          EventTypesEnum.CANCEL,
-          this.currentCancelBlockNumber,
-        );
-      const newCancelEvents = await this.querySubgraphCancelEvents(
-        this.currentCancelBlockNumber,
-        cancelTxHashesInCurrentBlock,
+    if (this.currentCancelBlockNumber <= 0) {
+      const latestCancelEvent = await this.getLatestEvent(
+        EventTypesEnum.CANCEL,
       );
-      if (newCancelEvents.length) {
-        try {
-          const eventsToSync = [];
-          for (const newCancelEvent of newCancelEvents) {
-            console.log(`Got new Cancel event, tx hash: ${newCancelEvent.id}`);
-            const savedCancelEvent = await this.saveNewEvent(
-              newCancelEvent,
-              EventTypesEnum.CANCEL,
-            );
-            this.currentCancelBlockNumber = savedCancelEvent.blockNumber;
+      console.log(
+        `Latest block number with a Cancel event in our DB: ${latestCancelEvent?.blockNumber}`,
+      );
+      this.currentCancelBlockNumber = latestCancelEvent?.blockNumber ?? 1;
+    }
+    const cancelTxHashesInCurrentBlock =
+      await this.getTxHashesByEventTypeAndBlockNumber(
+        EventTypesEnum.CANCEL,
+        this.currentCancelBlockNumber,
+      );
+    const newCancelEvent = await this.querySubgraphCancelEvents(
+      this.currentCancelBlockNumber,
+      cancelTxHashesInCurrentBlock,
+    );
+    if (newCancelEvent) {
+      console.log(`Got new Cancel event, tx hash: ${newCancelEvent.id}`);
+      const savedCancelEvent = await this.saveNewEvent(
+        newCancelEvent,
+        EventTypesEnum.CANCEL,
+      );
+      this.currentCancelBlockNumber = savedCancelEvent.blockNumber;
 
-            eventsToSync.push(savedCancelEvent);
-          }
-
-          await this.syncToMarketplace(eventsToSync);
-        } catch (e) {
-          console.log('Error processing new Cancel events: ' + e);
-        }
-      }
-
-      this.isCancelEventsInProcess = false;
-    } else {
-      console.log('Cancel events are in process, skipping ...');
+      await this.syncToMarketplace(savedCancelEvent);
     }
   }
 
@@ -302,7 +239,7 @@ export class OrdersService implements OnModuleInit {
         txValue: newEvent.txValue,
         blockNumber: newEvent.blockNumber,
         blockTimestamp: newEvent.blockTimestamp,
-        type: EventTypesEnum.MATCH,
+        type: eventType,
         leftOrderHash: newEvent.leftOrderHash,
         rightOrderHash: newEvent.rightOrderHash,
         leftMaker: newEvent.leftMaker,
@@ -331,18 +268,21 @@ export class OrdersService implements OnModuleInit {
       });
     }
 
-    const savedEvent = await this.marketplaceIndexerRepository.save(newData);
-    return savedEvent;
+    try {
+      const savedEvent = await this.marketplaceIndexerRepository.save(newData);
+      return savedEvent;
+    } catch (error) {
+      console.log(error);
+    }
   }
 
   private async querySubgraphMatchEvents(
     currentBlockNumber: number,
     txHashes: string[],
-  ): Promise<OrderMatchEntity[]> {
-    let value: OrderMatchEntity[] = [];
+  ): Promise<OrderMatchEntity> {
     const formattedTxHashes = `\"${txHashes.join(`\", \"`)}\"`;
     const queryString = `{
-      orderMatchEntities(first: ${this.config.values.SUBGRAPH_POLLING_NUMBER}, orderBy: blockNumber, orderDirection: asc, where: {blockNumber_gte: ${currentBlockNumber}, id_not_in: [${formattedTxHashes}]}) {
+      orderMatchEntities(first: 1, orderBy: blockNumber, orderDirection: asc, where: {blockNumber_gte: ${currentBlockNumber}, id_not_in: [${formattedTxHashes}]}) {
         id
         txFrom
         txValue
@@ -368,31 +308,30 @@ export class OrdersService implements OnModuleInit {
         }),
       );
       if (result?.data?.data?.orderMatchEntities?.length) {
-        value = result.data.data.orderMatchEntities;
+        return result.data.data.orderMatchEntities[0];
+      } else {
+        return;
       }
     } catch (error) {
       console.log(error);
     }
-
-    return value;
   }
 
   /**
    * Makes a GraphQL request to the subgraph to get the Cancel event which has not yet been
    * saved into the marketplace-indexer table.
-   * Return the array with Cancel events data.
+   * Return the Cancel event data.
    * @param currentBlockNumber
    * @param txHashes
-   * @returns Promise<OrderCancelEntity[]>
+   * @returns Promise<OrderCancelEntity>
    */
   private async querySubgraphCancelEvents(
     currentBlockNumber: number,
     txHashes: string[],
-  ): Promise<OrderCancelEntity[]> {
-    let value: OrderCancelEntity[] = [];
+  ): Promise<OrderCancelEntity> {
     const formattedTxHashes = `\"${txHashes.join(`\", \"`)}\"`;
     const queryString = `{
-      orderCancelEntities(first: ${this.config.values.SUBGRAPH_POLLING_NUMBER}, orderBy: blockNumber, orderDirection: asc, where: {blockNumber_gte: ${currentBlockNumber}, id_not_in: [${formattedTxHashes}]}) {
+      orderCancelEntities(first: 1, orderBy: blockNumber, orderDirection: asc, where: {blockNumber_gte: ${currentBlockNumber}, id_not_in: [${formattedTxHashes}]}) {
         id
         txFrom
         txValue
@@ -414,13 +353,11 @@ export class OrdersService implements OnModuleInit {
         }),
       );
       if (result?.data?.data?.orderCancelEntities?.length) {
-        value = result.data.data.orderCancelEntities;
+        return result.data.data.orderCancelEntities[0];
       }
     } catch (e) {
       console.log(e);
     }
-
-    return value;
   }
 
   /**
@@ -468,7 +405,13 @@ export class OrdersService implements OnModuleInit {
     this.logger.log('Running extra synchronization to the Marketplace...');
     const events = await this.marketplaceIndexerRepository
       .createQueryBuilder()
-      .select(['mi.type', 'mi.txHash', 'mi.leftOrderHash', 'mi.leftMaker'])
+      .select([
+        'mi.type',
+        'mi.txHash',
+        'mi.leftOrderHash',
+        'mi.leftMaker',
+        'mi.rightMaker',
+      ])
       .from(MarketplaceIndexer, 'mi')
       .where(
         `
