@@ -1,12 +1,12 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cron, CronExpression, SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
-import { Repository } from 'typeorm';
+import { Repository, IsNull, Not } from 'typeorm';
 import { MarketplaceIndexer } from './order.entity';
 import { OrderMatchEntity, OrderCancelEntity } from './order.types';
 import { AppConfig } from '../configuration/configuration.service';
-import R, { insert } from 'ramda';
+import R, { insert, where } from 'ramda';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { EventTypesEnum } from './order.types';
@@ -18,6 +18,8 @@ export class OrdersService implements OnModuleInit {
 
   private currentCancelBlockNumber = 0;
   private isCancelEventsInProcess = false;
+
+  private logger = new Logger(this.constructor.name);
 
   constructor(
     @InjectRepository(MarketplaceIndexer)
@@ -32,18 +34,30 @@ export class OrdersService implements OnModuleInit {
    * the Indexer's cron job.
    */
   public onModuleInit() {
-    const cronJob = new CronJob(
+    const orderStatusCronJob = new CronJob(
       this.config.values.SUBGRAPH_POLLING_CRON,
       () => {
-        this.updateOrderStatus();
+        this.updateMatchOrdersStatus();
+        this.updateCancelOrdersStatus();
+      },
+    );
+    const orderbookStatusCronJob = new CronJob(
+      CronExpression.EVERY_HOUR,
+      () => {
+        this.ensureDeliveryToMarketplace();
       },
     );
 
     this.schedulerRegistry.addCronJob(
       'Polling the subgraph, wait and see...',
-      cronJob,
+      orderStatusCronJob,
     );
-    cronJob.start();
+    this.schedulerRegistry.addCronJob(
+      'Making sure match & cancel events are sent to the Orderbook.',
+      orderbookStatusCronJob,
+    );
+    orderStatusCronJob.start();
+    orderbookStatusCronJob.start();
   }
 
   /**
@@ -54,7 +68,7 @@ export class OrdersService implements OnModuleInit {
    * #4 Send event to marketplace backend by calling its internal endpoint
    */
   // @Cron(CronExpression.EVERY_5_SECONDS)
-  public async updateOrderStatus() {
+  public async updateMatchOrdersStatus() {
     /**
      * @TODO there's no mechanism to ensure that events from the indexer
      * always find their way to the orderbook BE bc if the syncToMarketplace()
@@ -126,7 +140,9 @@ export class OrdersService implements OnModuleInit {
     } else {
       console.log('Match events are in process, skipping ...');
     }
+  }
 
+  public async updateCancelOrdersStatus() {
     // Pulling & processing Cancel events from the subgraph
     if (!this.isCancelEventsInProcess) {
       this.isCancelEventsInProcess = true;
@@ -211,22 +227,28 @@ export class OrdersService implements OnModuleInit {
   // }
 
   private async syncToMarketplace(events: MarketplaceIndexer[]) {
-    if(events.length) {
+    if (events.length) {
       try {
         if (EventTypesEnum.MATCH === events[0].type) {
-          await firstValueFrom(
+          const matchResult = await firstValueFrom(
             this.httpService.put(
-              `${this.config.values.ORDERBOOK_URL}/v1/internal/orders/match`,
-              events,
+              `${this.config.values.ORDERBOOK_URL}/internal/orders/match`,
+              {
+                events: events,
+              },
             ),
           );
+          await this.udateOrderbookStatus(matchResult.data);
         } else if (EventTypesEnum.CANCEL === events[0].type) {
-          await firstValueFrom(
+          const cancelResult = await firstValueFrom(
             this.httpService.put(
-              `${this.config.values.ORDERBOOK_URL}/v1/internal/orders/cancel`,
-              events,
+              `${this.config.values.ORDERBOOK_URL}/internal/orders/cancel`,
+              {
+                events: events,
+              },
             ),
           );
+          await this.udateOrderbookStatus(cancelResult.data);
         }
       } catch (e) {
         console.log(e);
@@ -399,5 +421,67 @@ export class OrdersService implements OnModuleInit {
     }
 
     return value;
+  }
+
+  /**
+   * Updates the orderbookStatus property of the entries in the
+   * marketplace-indexer table.
+   * @param events - object as follows: {
+   *  'txHash1': 'success',
+   *  'txHash2': 'not found',
+   *  'txHash3': 'error: ',
+   *  ...
+   * }
+   * @returns void
+   */
+  private async udateOrderbookStatus(events) {
+    if (events.hasOwnProperty('data')) {
+      const txHashes = Object.keys(events.data);
+      for (const txHash of txHashes) {
+        try {
+          await this.marketplaceIndexerRepository
+            .createQueryBuilder()
+            .update(MarketplaceIndexer)
+            .set({
+              orderbookStatus: events[txHash],
+            })
+            .where({
+              txHash: txHash,
+            })
+            .execute();
+        } catch (e) {
+          console.log('Error updating orderbookStatus: ' + e);
+        }
+      }
+    }
+  }
+
+  /**
+   * This methos is intented to be called by a cron job and
+   * its purpose is to find all events from the marketplace-indexer
+   * table with orderbookStatus != success or != not found
+   * and send its statuses once again.
+   * Thus the Indexer sends match and cancel events if it failed to
+   * send it before for any reason.
+   */
+  private async ensureDeliveryToMarketplace() {
+    this.logger.log('Running extra synchronization to the Marketplace...');
+    const events = await this.marketplaceIndexerRepository
+      .createQueryBuilder()
+      .select(['mi.type', 'mi.txHash', 'mi.leftOrderHash', 'mi.leftMaker'])
+      .from(MarketplaceIndexer, 'mi')
+      .where(
+        `
+        mi.orderbookStatus IS NULL OR
+        (mi.orderbookStatus != 'success' AND mi.orderbookStatus != 'not found')
+      `,
+      )
+      .take(100)
+      .getMany();
+    this.logger.log(
+      `Found ${events.length} events which require synchronization.`,
+    );
+    await this.syncToMarketplace(events);
+    this.logger.log('Completed extra synchronization to the Marketplace.');
   }
 }

@@ -64,6 +64,12 @@ export class MarketplaceIndexer {
   @Column()
   rightAssetData: string;
 
+  @Column({
+    nullable: true,
+    default: null,
+  })
+  orderbookStatus: string;
+
   @CreateDateColumn()
   createdAt: Date;
   @UpdateDateColumn()
