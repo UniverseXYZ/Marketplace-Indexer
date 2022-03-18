@@ -10,6 +10,7 @@ import R, { insert, where } from 'ramda';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { EventTypesEnum } from './order.types';
+import { ethers } from 'ethers';
 
 @Injectable()
 export class OrdersService implements OnModuleInit {
@@ -188,7 +189,7 @@ export class OrdersService implements OnModuleInit {
           await this.udateOrderbookStatus(cancelResult.data);
         }
       } catch (e) {
-        console.log(e);
+        this.logger.error(e);
       }
     }
   }
@@ -370,10 +371,11 @@ export class OrdersService implements OnModuleInit {
    *  ...
    * }
    * @returns void
+   * @throws {Error}
    */
   private async udateOrderbookStatus(events) {
-    if (events.hasOwnProperty('data')) {
-      const txHashes = Object.keys(events.data);
+    const txHashes = Object.keys(events);
+    if (Array.isArray(txHashes) && ethers.utils.isAddress(txHashes[0])) {
       for (const txHash of txHashes) {
         try {
           await this.marketplaceIndexerRepository
@@ -390,6 +392,12 @@ export class OrdersService implements OnModuleInit {
           console.log('Error updating orderbookStatus: ' + e);
         }
       }
+    } else {
+      throw new Error(
+        `udateOrderbookStatus: Invalid events input format. Expected txHashes as keys, got ${JSON.stringify(
+          events,
+        )}`,
+      );
     }
   }
 
