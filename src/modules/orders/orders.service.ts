@@ -375,7 +375,7 @@ export class OrdersService implements OnModuleInit {
    */
   private async udateOrderbookStatus(events) {
     const txHashes = Object.keys(events);
-    if (Array.isArray(txHashes) && ethers.utils.isAddress(txHashes[0])) {
+    if (Array.isArray(txHashes) && ethers.utils.isHexString(txHashes[0])) {
       for (const txHash of txHashes) {
         try {
           await this.marketplaceIndexerRepository
