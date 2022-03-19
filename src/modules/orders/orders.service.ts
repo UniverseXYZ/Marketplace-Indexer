@@ -93,7 +93,7 @@ export class OrdersService implements OnModuleInit {
       );
       this.currentMatchBlockNumber = savedMatchEvent.blockNumber;
 
-      await this.syncToMarketplace(savedMatchEvent);
+      await this.syncToMarketplace([savedMatchEvent]);
     }
   }
 
@@ -125,7 +125,7 @@ export class OrdersService implements OnModuleInit {
       );
       this.currentCancelBlockNumber = savedCancelEvent.blockNumber;
 
-      await this.syncToMarketplace(savedCancelEvent);
+      await this.syncToMarketplace([savedCancelEvent]);
     }
   }
 
