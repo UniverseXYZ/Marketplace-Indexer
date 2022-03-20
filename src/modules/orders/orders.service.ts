@@ -78,7 +78,7 @@ export class OrdersService implements OnModuleInit {
         const latestMatchEvent = await this.getLatestEvent(
           EventTypesEnum.MATCH,
         );
-        console.log(
+        this.logger.log(
           `Latest block number with a Match event in our DB: ${latestMatchEvent?.blockNumber}`,
         );
         this.currentMatchBlockNumber = latestMatchEvent?.blockNumber ?? 1;
@@ -104,7 +104,9 @@ export class OrdersService implements OnModuleInit {
           // blockNumber but there may be unprocesessed events with lower blockNumber in the subgraph.
           const eventsToSync = [];
           for (const newMatchEvent of newMatchEvents) {
-            console.log(`Got new Match event, tx hash: ${newMatchEvent.id}`);
+            this.logger.log(
+              `Got new Match event, tx hash: ${newMatchEvent.id}`,
+            );
 
             // bulk insert would increase the performance but we'd loose the cool feature of .save()
             // which is "upsert" way of saving objects which is quite useful in here. note that primary key is txHash.
@@ -126,13 +128,13 @@ export class OrdersService implements OnModuleInit {
 
           await this.syncToMarketplace(eventsToSync); // does not throw any exceptions.
         } catch (e) {
-          console.log('Error processing new Match events: ' + e);
+          this.logger.error('Error processing new Match events: ' + e);
         }
       }
 
       this.isMatchEventsInProcess = false;
     } else {
-      console.log('Match events are in process, skipping ...');
+      this.logger.log('Match events are in process, skipping ...');
     }
   }
 
@@ -145,7 +147,7 @@ export class OrdersService implements OnModuleInit {
         const latestCancelEvent = await this.getLatestEvent(
           EventTypesEnum.CANCEL,
         );
-        console.log(
+        this.logger.log(
           `Latest block number with a Cancel event in our DB: ${latestCancelEvent?.blockNumber}`,
         );
         this.currentCancelBlockNumber = latestCancelEvent?.blockNumber ?? 1;
@@ -163,7 +165,9 @@ export class OrdersService implements OnModuleInit {
         try {
           const eventsToSync = [];
           for (const newCancelEvent of newCancelEvents) {
-            console.log(`Got new Cancel event, tx hash: ${newCancelEvent.id}`);
+            this.logger.log(
+              `Got new Cancel event, tx hash: ${newCancelEvent.id}`,
+            );
             const savedCancelEvent = await this.saveNewEvent(
               newCancelEvent,
               EventTypesEnum.CANCEL,
@@ -175,13 +179,13 @@ export class OrdersService implements OnModuleInit {
 
           await this.syncToMarketplace(eventsToSync);
         } catch (e) {
-          console.log('Error processing new Cancel events: ' + e);
+          this.logger.error('Error processing new Cancel events: ' + e);
         }
       }
 
       this.isCancelEventsInProcess = false;
     } else {
-      console.log('Cancel events are in process, skipping ...');
+      this.logger.log('Cancel events are in process, skipping ...');
     }
   }
 
@@ -216,7 +220,7 @@ export class OrdersService implements OnModuleInit {
   //       );
   //     }
   //   } catch (e) {
-  //     console.log(e);
+  //     this.logger.error(e);
   //   }
   // }
 
@@ -329,7 +333,7 @@ export class OrdersService implements OnModuleInit {
       const savedEvent = await this.marketplaceIndexerRepository.save(newData);
       return savedEvent;
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
     }
   }
 
@@ -369,7 +373,7 @@ export class OrdersService implements OnModuleInit {
         value = result.data.data.orderMatchEntities;
       }
     } catch (error) {
-      console.log(error);
+      this.logger.error(error);
     }
 
     return value;
@@ -415,7 +419,7 @@ export class OrdersService implements OnModuleInit {
         value = result.data.data.orderCancelEntities;
       }
     } catch (e) {
-      console.log(e);
+      this.logger.error(e);
     }
 
     return value;
@@ -449,7 +453,7 @@ export class OrdersService implements OnModuleInit {
             })
             .execute();
         } catch (e) {
-          console.log('Error updating orderbookStatus: ' + e);
+          this.logger.error('Error updating orderbookStatus: ' + e);
         }
       }
     } else {
