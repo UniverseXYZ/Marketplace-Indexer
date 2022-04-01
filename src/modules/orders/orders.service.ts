@@ -489,10 +489,8 @@ export class OrdersService implements OnModuleInit {
       .from(MarketplaceIndexer, 'mi')
       .where(
         `
-        mi.type = :type AND (
-          mi.orderbookStatus IS NULL OR
-          (mi.orderbookStatus != 'success' AND mi.orderbookStatus != 'not found')
-        )
+        mi.type = :type AND
+        mi.orderbookStatus IS NULL
       `,
         {
           type: eventType,
