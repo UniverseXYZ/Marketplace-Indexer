@@ -74,31 +74,31 @@ export class OrdersService implements OnModuleInit {
     if (!this.isMatchEventsInProcess) {
       this.isMatchEventsInProcess = true;
 
-      if (this.currentMatchBlockNumber <= 0) {
-        const latestMatchEvent = await this.getLatestEvent(
-          EventTypesEnum.MATCH,
-        );
-        this.logger.log(
-          `Latest block number with a Match event in our DB: ${latestMatchEvent?.blockNumber}`,
-        );
-        this.currentMatchBlockNumber = latestMatchEvent?.blockNumber ?? 1;
-      }
-      const matchTxHashesInCurrentBlock =
-        await this.getTxHashesByEventTypeAndBlockNumber(
-          EventTypesEnum.MATCH,
+      // try catch block is to make sure the toggle isMatchEventsInProcess will eventually be set to false!
+      // one important aspect here is that in case of an exception when saving events, we need to stop the whole batch (the for loop for newMatchEvents array)
+      // so that it will pull the same batch and retry on the next iteration.
+      // that means the Indexer does not move forward if the exception keeps being thrown, rather than
+      // moving forward with some event unprocessed and the problem left being unaware of.
+      try {
+        if (this.currentMatchBlockNumber <= 0) {
+          const latestMatchEvent = await this.getLatestEvent(
+            EventTypesEnum.MATCH,
+          );
+          this.logger.log(
+            `Latest block number with a Match event in our DB: ${latestMatchEvent?.blockNumber}`,
+          );
+          this.currentMatchBlockNumber = latestMatchEvent?.blockNumber ?? 1;
+        }
+        const matchTxHashesInCurrentBlock =
+          await this.getTxHashesByEventTypeAndBlockNumber(
+            EventTypesEnum.MATCH,
+            this.currentMatchBlockNumber,
+          );
+        const newMatchEvents = await this.querySubgraphMatchEvents(
           this.currentMatchBlockNumber,
+          matchTxHashesInCurrentBlock,
         );
-      const newMatchEvents = await this.querySubgraphMatchEvents(
-        this.currentMatchBlockNumber,
-        matchTxHashesInCurrentBlock,
-      );
-      if (newMatchEvents.length) {
-        // try catch block is to make sure the toggle isMatchEventsInProcess will eventually be set to false!
-        // one important aspect here is that in case of an exception when saving events, we need to stop the whole batch (newMatchEvents array)
-        // so that it will pull the same batch and retry on the next iteration.
-        // that means the Indexer does not move forward if the exception keeps being thrown, rather than
-        // moving forward with some event unprocessed and the problem left being unaware of.
-        try {
+        if (newMatchEvents.length) {
           // this code must run synchronously bc there may be a case when one of the promises resolves successfully and its blockNumber
           // gets into the DB and the Indexer service restarts for any reason, the next iteration will pull events starting the latest
           // blockNumber but there may be unprocesessed events with lower blockNumber in the subgraph.
@@ -127,9 +127,9 @@ export class OrdersService implements OnModuleInit {
           }
 
           await this.syncToMarketplace(eventsToSync); // does not throw any exceptions.
-        } catch (e) {
-          this.logger.error('Error processing new Match events: ' + e);
         }
+      } catch (e) {
+        this.logger.error('Error processing new Match events: ' + e);
       }
 
       this.isMatchEventsInProcess = false;
@@ -143,26 +143,26 @@ export class OrdersService implements OnModuleInit {
     if (!this.isCancelEventsInProcess) {
       this.isCancelEventsInProcess = true;
 
-      if (this.currentCancelBlockNumber <= 0) {
-        const latestCancelEvent = await this.getLatestEvent(
-          EventTypesEnum.CANCEL,
-        );
-        this.logger.log(
-          `Latest block number with a Cancel event in our DB: ${latestCancelEvent?.blockNumber}`,
-        );
-        this.currentCancelBlockNumber = latestCancelEvent?.blockNumber ?? 1;
-      }
-      const cancelTxHashesInCurrentBlock =
-        await this.getTxHashesByEventTypeAndBlockNumber(
-          EventTypesEnum.CANCEL,
+      try {
+        if (this.currentCancelBlockNumber <= 0) {
+          const latestCancelEvent = await this.getLatestEvent(
+            EventTypesEnum.CANCEL,
+          );
+          this.logger.log(
+            `Latest block number with a Cancel event in our DB: ${latestCancelEvent?.blockNumber}`,
+          );
+          this.currentCancelBlockNumber = latestCancelEvent?.blockNumber ?? 1;
+        }
+        const cancelTxHashesInCurrentBlock =
+          await this.getTxHashesByEventTypeAndBlockNumber(
+            EventTypesEnum.CANCEL,
+            this.currentCancelBlockNumber,
+          );
+        const newCancelEvents = await this.querySubgraphCancelEvents(
           this.currentCancelBlockNumber,
+          cancelTxHashesInCurrentBlock,
         );
-      const newCancelEvents = await this.querySubgraphCancelEvents(
-        this.currentCancelBlockNumber,
-        cancelTxHashesInCurrentBlock,
-      );
-      if (newCancelEvents.length) {
-        try {
+        if (newCancelEvents.length) {
           const eventsToSync = [];
           for (const newCancelEvent of newCancelEvents) {
             this.logger.log(
@@ -178,9 +178,9 @@ export class OrdersService implements OnModuleInit {
           }
 
           await this.syncToMarketplace(eventsToSync);
-        } catch (e) {
-          this.logger.error('Error processing new Cancel events: ' + e);
         }
+      } catch (e) {
+        this.logger.error('Error processing new Cancel events: ' + e);
       }
 
       this.isCancelEventsInProcess = false;
