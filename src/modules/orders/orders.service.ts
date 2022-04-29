@@ -11,14 +11,17 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { EventTypesEnum } from './order.types';
 import { ethers } from 'ethers';
+import { Utils } from 'src/common/utils';
 
 @Injectable()
 export class OrdersService implements OnModuleInit {
   private currentMatchBlockNumber = 0;
   private isMatchEventsInProcess = false;
+  private matchEventsSkippingCounter = 0;
 
   private currentCancelBlockNumber = 0;
   private isCancelEventsInProcess = false;
+  private cancelEventsSkippingCounter = 0;
 
   private logger = new Logger(this.constructor.name);
 
@@ -133,8 +136,23 @@ export class OrdersService implements OnModuleInit {
       }
 
       this.isMatchEventsInProcess = false;
+      this.matchEventsSkippingCounter = 0;
     } else {
-      this.logger.log('Match events are in process, skipping ...');
+      if (
+        this.matchEventsSkippingCounter <
+        Number(this.config.values.SKIPPING_COUNTER_LIMIT)
+      ) {
+        this.matchEventsSkippingCounter++;
+        this.logger.log(
+          `Match events are in process, skipping (${this.matchEventsSkippingCounter}) ...`,
+        );
+      } else {
+        // when the counter reaches the limit, restart the pod.
+        this.logger.log(
+          `Match events skipping counter reached its limit. The process is not responsive.`,
+        );
+        Utils.shutdown();
+      }
     }
   }
 
@@ -184,45 +202,25 @@ export class OrdersService implements OnModuleInit {
       }
 
       this.isCancelEventsInProcess = false;
+      this.cancelEventsSkippingCounter = 0;
     } else {
-      this.logger.log('Cancel events are in process, skipping ...');
+      if (
+        this.cancelEventsSkippingCounter <
+        Number(this.config.values.SKIPPING_COUNTER_LIMIT)
+      ) {
+        this.cancelEventsSkippingCounter++;
+        this.logger.log(
+          `Cancel events are in process, skipping (${this.cancelEventsSkippingCounter}) ...`,
+        );
+      } else {
+        // when the counter reaches the limit, restart the pod.
+        this.logger.log(
+          `Cancel events skipping counter reached its limit. The process is not responsive.`,
+        );
+        Utils.shutdown();
+      }
     }
   }
-
-  // private async syncToMarketplace(event: MarketplaceIndexer) {
-  //   try {
-  //     if (EventTypesEnum.MATCH === event.type) {
-  //       await firstValueFrom(
-  //         this.httpService.put(
-  //           `${this.config.values.ORDERBOOK_URL}/v1/internal/orders/match`,
-  //           {
-  //             txHash: event.txHash,
-  //             leftMaker: event.leftMaker,
-  //             rightMaker: event.rightMaker,
-  //             leftOrderHash: event.leftOrderHash,
-  //             rightOrderHash: event.rightOrderHash,
-  //             newLeftFill: event.newLeftFill,
-  //             newRightFill: event.newRightFill,
-  //             txFrom: event.txFrom,
-  //           },
-  //         ),
-  //       );
-  //     } else if (EventTypesEnum.CANCEL === event.type) {
-  //       await firstValueFrom(
-  //         this.httpService.put(
-  //           `${this.config.values.ORDERBOOK_URL}/v1/internal/orders/cancel`,
-  //           {
-  //             txHash: event.txHash,
-  //             leftMaker: event.leftMaker,
-  //             leftOrderHash: event.leftOrderHash,
-  //           },
-  //         ),
-  //       );
-  //     }
-  //   } catch (e) {
-  //     this.logger.error(e);
-  //   }
-  // }
 
   private async syncToMarketplace(events: MarketplaceIndexer[]) {
     if (events.length) {
